@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Copy, LogOut, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,14 +10,30 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTenant } from '@/hooks/use-tenant';
 import { useUpdateBrandProfile } from '@/hooks/use-brand-profile';
+import { getConfig, clearConfig } from '@/lib/config';
 
 interface SettingsPageProps {
   tenantId: string;
+  onLogout?: () => void;
 }
 
-export default function SettingsPage({ tenantId }: SettingsPageProps) {
+export default function SettingsPage({ tenantId, onLogout }: SettingsPageProps) {
   const { data: tenant, isLoading } = useTenant(tenantId);
   const updateProfile = useUpdateBrandProfile(tenantId);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const config = getConfig();
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success(`${label} copied to clipboard`);
+    });
+  }
+
+  function handleLogout() {
+    clearConfig();
+    onLogout?.();
+    window.location.reload();
+  }
 
   const [form, setForm] = useState({
     companyName: '',
@@ -115,6 +131,68 @@ export default function SettingsPage({ tenantId }: SettingsPageProps) {
           Configure your brand profile to customize generated content.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Your Credentials</CardTitle>
+          <CardDescription>
+            Save these credentials to connect from another device or browser.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Tenant ID</Label>
+            <div className="flex gap-2">
+              <Input value={tenantId} readOnly className="font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(tenantId, 'Tenant ID')}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>API Key</Label>
+            <div className="flex gap-2">
+              <Input
+                value={showApiKey ? (config?.apiKey || '') : '••••••••••••••••••••••••'}
+                readOnly
+                className="font-mono text-xs"
+                type={showApiKey ? 'text' : 'password'}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowApiKey(!showApiKey)}
+              >
+                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(config?.apiKey || '', 'API Key')}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <Separator />
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+            Disconnect &amp; Logout
+          </Button>
+        </CardContent>
+      </Card>
 
       <form onSubmit={handleSave} className="space-y-6">
         <Card>

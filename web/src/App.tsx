@@ -19,7 +19,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<GeneratePage />} />
         <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/settings" element={<SettingsPage tenantId={config!.tenantId} />} />
+        <Route path="/settings" element={<SettingsPage tenantId={config!.tenantId} onLogout={clear} />} />
         <Route path="/connections" element={<ConnectionsPage tenantId={config!.tenantId} />} />
       </Routes>
     </AppLayout>
