@@ -17,38 +17,38 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^2.2.15",
     "@prisma/client": "^5.22.0",
-    "cors": "^2.8.6",
-    "crypto-js": "^4.2.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.1",
-    "openai": "^4.73.0",
-    "sharp": "^0.34.5",
-    "uuid": "^11.0.3",
-    "winston": "^3.17.0",
-    "zod": "^3.23.8"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/crypto-js": "^4.2.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.9.0",
     "@types/sharp": "^0.31.1",
     "@types/uuid": "^10.0.0",
+    "cors": "^2.8.6",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "openai": "^4.73.0",
+    "prisma": "^5.22.0",
+    "sharp": "^0.34.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3",
+    "uuid": "^11.0.3",
+    "winston": "^3.17.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.14.0",
     "@typescript-eslint/parser": "^8.14.0",
     "eslint": "^9.14.0",
     "nodemon": "^3.1.7",
     "prettier": "^3.3.3",
-    "prisma": "^5.22.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.6.3",
     "vitest": "^2.1.5"
   }
 }
