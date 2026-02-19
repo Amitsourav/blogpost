@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brandProfile   BrandProfile?
+  cmsConnections CMSConnection[]
+  contentTasks   ContentTask[]
+
+  @@map("tenants")
+}
+
+model BrandProfile {
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  companyName       String
+  industry          String
+  brandTone         String
+  targetAudience    String
+  writingGuidelines String   @default("")
+  seoPreferences    Json     @default("{}")
+  defaultAuthor     String   @default("")
+  contentRules      Json     @default("[]")
+  customPrompt      String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("brand_profiles")
+}
+
+model CMSConnection {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  provider            String   @default("notion")
+  accessToken         String
+  triggerDatabaseId   String   @default("")
+  contentDatabaseId   String
+  config              Json     @default("{}")
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("cms_connections")
+}
+
+enum ContentTaskStatus {
+  PENDING
+  IN_PROGRESS
+  GENERATING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+model ContentTask {
+  id              String            @id @default(uuid())
+  tenantId        String
+  contentType     String            @default("blog")
+  status          ContentTaskStatus @default(PENDING)
+  triggerSource   String            @default("api")
+  inputTopic      String
+  inputKeywords   String[]          @default([])
+  output          Json?
+  publishedCmsId  String?
+  retryCount      Int               @default(0)
+  maxRetries      Int               @default(3)
+  errorMessage    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs   TaskLog[]
+
+  @@map("content_tasks")
+}
+
+model TaskLog {
+  id        String   @id @default(uuid())
+  taskId    String
+  level     String   @default("INFO")
+  stage     String
+  message   String
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  task ContentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_logs")
+}

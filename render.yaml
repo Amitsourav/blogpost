@@ -1,0 +1,44 @@
+databases:
+  - name: ai-blog-db
+    plan: free
+    databaseName: ai_content_agent
+    user: ai_blog_user
+
+services:
+  - type: web
+    name: ai-blog-agent
+    plan: free
+    runtime: node
+    buildCommand: npm install && npx prisma generate && npm run build && cd web && npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-blog-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENAI_MODEL
+        value: openai/gpt-4o
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_CONTENT_DATABASE_ID
+        sync: false
+      - key: NOTION_TRIGGER_DATABASE_ID
+        value: ""
+      - key: NOTION_POLLING_ENABLED
+        value: "false"
+      - key: IMAGE_GENERATION_ENABLED
+        value: "true"
+      - key: IMAGE_GENERATION_API_KEY
+        sync: false
+      - key: IMAGE_GENERATION_MODEL
+        value: google/gemini-2.5-flash-image
+      - key: LOG_LEVEL
+        value: info
