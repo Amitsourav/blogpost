@@ -17,6 +17,7 @@ const controller = new TenantController(service);
 const router = Router();
 
 router.post('/', validateRequest(createTenantSchema), controller.create);
+router.get('/by-slug/:slug', controller.getBySlug);
 router.get('/:id', controller.getById);
 router.patch('/:id', validateRequest(updateTenantSchema), controller.update);
 router.put('/:id/brand-profile', validateRequest(upsertBrandProfileSchema), controller.upsertBrandProfile);

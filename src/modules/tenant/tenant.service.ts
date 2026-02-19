@@ -24,6 +24,12 @@ export class TenantService {
     return tenant;
   }
 
+  async getTenantBySlug(slug: string) {
+    const tenant = await this.repo.findBySlug(slug);
+    if (!tenant) throw new NotFoundError('Tenant');
+    return tenant;
+  }
+
   async updateTenant(id: string, input: UpdateTenantInput) {
     await this.getTenant(id);
     return this.repo.update(id, input);

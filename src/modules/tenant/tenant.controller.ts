@@ -22,6 +22,15 @@ export class TenantController {
     }
   };
 
+  getBySlug = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenant = await this.service.getTenantBySlug(req.params.slug as string);
+      res.json(tenant);
+    } catch (err) {
+      next(err);
+    }
+  };
+
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tenant = await this.service.updateTenant(req.params.id as string, req.body);
