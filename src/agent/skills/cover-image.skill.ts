@@ -100,7 +100,7 @@ export class CoverImageSkill implements ISkill {
     const gradientTop = height - textBlockHeight - Math.round(padding * 0.5);
     const textY = height - textBlockHeight + padding * 0.5;
 
-    // Build SVG overlay with gradient background + white text
+    // Build SVG overlay with semi-transparent dark blue gradient + white text
     const textLines = lines
       .map(
         (line, i) =>
@@ -111,11 +111,11 @@ export class CoverImageSkill implements ISkill {
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(0,0,0,0)" />
-      <stop offset="100%" stop-color="rgba(0,0,0,0.75)" />
+      <stop offset="0%" stop-color="rgba(12,40,80,0)" />
+      <stop offset="100%" stop-color="rgba(12,40,80,0.8)" />
     </linearGradient>
     <filter id="shadow">
-      <feDropShadow dx="1" dy="1" stdDeviation="3" flood-color="rgba(0,0,0,0.6)" />
+      <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.4)" />
     </filter>
   </defs>
   <rect x="0" y="${gradientTop}" width="${width}" height="${height - gradientTop}" fill="url(#grad)" />
@@ -233,27 +233,34 @@ export class CoverImageSkill implements ISkill {
     }
   }
 
-  private buildImagePrompt(title: string, tags: string[], industry: string): string {
-    return `Create a high-quality, photorealistic blog cover image for: "${title}"
+  private buildImagePrompt(title: string, tags: string[], _industry: string): string {
+    return `Create a flat vector illustration for an education loan blog cover for a student-focused fintech brand named Fund My Campus.
 
-SCENE REQUIREMENTS:
-- Show a realistic scene directly related to the topic. For education/finance: students in a university campus, a student studying with laptop and documents, a family discussing finances at a table, a graduation ceremony, a bank consultation scene, etc.
-- The scene must clearly relate to "${title}" — a viewer should understand the topic from the image alone.
-- Include realistic Indian people (students aged 18-25, parents aged 40-55) in natural poses.
-- Setting: modern Indian context — university campus, library, home living room, bank office, or study desk.
+Blog topic: "${title}"
+Related themes: ${tags.join(', ')}
 
-STYLE:
-- Professional editorial photography style, like a top business magazine cover.
-- Warm, inviting lighting. Natural colors.
-- Shallow depth of field with the main subject in sharp focus.
-- Keep the BOTTOM THIRD of the image slightly darker or less busy — text will be placed there.
-- 16:9 landscape aspect ratio, suitable as a website blog header.
+Orientation: landscape
+Aspect ratio: 16:9 (wide)
+Target size: 1600×900
 
-STRICT RULES:
-- Absolutely NO text, words, letters, numbers, watermarks, or logos anywhere in the image.
-- No cartoons, illustrations, or clip art. Photorealistic only.
-- No generic stock photo feel — make it look candid and authentic.
+Style: modern flat vector illustration, minimal, clean, professional
 
-Industry: ${industry}. Related themes: ${tags.join(', ')}.`;
+Scene: education + finance concept using simple objects such as books, graduation cap, laptop, globe, university building, growth arrows, and a subtle rupee symbol. The objects should relate to the blog topic "${title}".
+
+Characters: no real humans, no faces, no facial details (only abstract shapes or faceless silhouettes if required)
+
+Mood: aspirational, trustworthy, calm
+
+Color palette: blue, teal, white with soft gradients
+
+Background: simple gradient or abstract geometric shapes
+
+Composition: wide layout with clear negative space in the bottom third for blog title text overlay, balanced elements
+
+Web optimization: flat shapes, low detail, clean edges, suitable for compression, fast-loading
+
+Avoid: photorealism, detailed textures, human faces, cartoon expressions, clutter, dark colors, any text or words or letters or numbers in the image
+
+Output: web-optimized landscape blog cover`;
   }
 }
