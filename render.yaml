@@ -10,7 +10,7 @@ services:
     plan: free
     runtime: node
     nodeVersion: "20.11.0"
-    buildCommand: npm install --platform=linux --arch=x64 && npx prisma generate && npm run build && cd web && npm install && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build && cd web && npm install && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
