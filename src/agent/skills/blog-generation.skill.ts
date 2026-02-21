@@ -161,7 +161,7 @@ Return a JSON object with:
 - secondaryKeywords: 6-10 secondary keywords
 - title: The display title for this blog post
 - excerpt: A 1-2 sentence summary (max 160 chars)
-- tags: 3-5 relevant tags`;
+- tags: 3-4 relevant tags (always return at least 3)`;
 
       const seoResult = await ai.generateStructured(
         'You are an SEO specialist. Extract metadata from blog content.',
