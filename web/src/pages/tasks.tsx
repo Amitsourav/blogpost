@@ -14,9 +14,9 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/status-badge';
-import { useTasks, useRetryTask } from '@/hooks/use-tasks';
+import { useTasks, useTask, useRetryTask } from '@/hooks/use-tasks';
 import { formatDate } from '@/lib/utils';
-import type { ContentTask, ContentTaskStatus } from '@/types';
+import type { ContentTaskStatus } from '@/types';
 
 const ALL_STATUSES: ContentTaskStatus[] = [
   'PENDING',
@@ -31,7 +31,7 @@ const ALL_STATUSES: ContentTaskStatus[] = [
 export default function TasksPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ContentTaskStatus | ''>('');
-  const [selectedTask, setSelectedTask] = useState<ContentTask | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const limit = 10;
 
   const { data, isLoading } = useTasks({ page, limit, status: statusFilter });
@@ -116,7 +116,7 @@ export default function TasksPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setSelectedTask(task)}
+                          onClick={() => setSelectedTaskId(task.id)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -179,8 +179,8 @@ export default function TasksPage() {
 
       {/* Detail Dialog */}
       <TaskDetailDialog
-        task={selectedTask}
-        onClose={() => setSelectedTask(null)}
+        taskId={selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
         onRetry={handleRetry}
       />
     </div>
@@ -188,114 +188,125 @@ export default function TasksPage() {
 }
 
 function TaskDetailDialog({
-  task,
+  taskId,
   onClose,
   onRetry,
 }: {
-  task: ContentTask | null;
+  taskId: string | null;
   onClose: () => void;
   onRetry: (id: string) => void;
 }) {
-  if (!task) return null;
+  const { data: task, isLoading } = useTask(taskId);
 
-  const blog = task.output?.blog;
-  const seo = task.output?.seo;
+  const blog = task?.output?.blog;
+  const seo = task?.output?.seo;
+  const logs = task?.logs ?? [];
 
   return (
-    <Dialog open={!!task} onOpenChange={() => onClose()}>
+    <Dialog open={!!taskId} onOpenChange={() => onClose()}>
       <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{blog?.title || task.inputTopic}</DialogTitle>
-          <DialogDescription>
-            <StatusBadge status={task.status} />
-            <span className="ml-2">{formatDate(task.createdAt)}</span>
-          </DialogDescription>
-        </DialogHeader>
+        {isLoading || !task ? (
+          <div className="space-y-4 py-4">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>{blog?.title || task.inputTopic}</DialogTitle>
+              <DialogDescription>
+                <StatusBadge status={task.status} />
+                <span className="ml-2">{formatDate(task.createdAt)}</span>
+              </DialogDescription>
+            </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Blog Content */}
-          {blog && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Content</h4>
-              <p className="text-sm text-muted-foreground">{blog.excerpt}</p>
-              <div className="max-h-60 overflow-y-auto rounded-md border p-3 text-sm">
-                {blog.content.split('\n').map((line, i) => (
-                  <p key={i} className={line ? '' : 'h-4'}>
-                    {line}
-                  </p>
-                ))}
-              </div>
-              <div className="flex gap-4 text-xs text-muted-foreground">
-                <span>Author: {blog.author}</span>
-                <span>{blog.readTimeMinutes} min read</span>
-              </div>
-            </div>
-          )}
-
-          {/* SEO Metadata */}
-          {seo && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">SEO Metadata</h4>
-              <div className="grid gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Meta Title:</span> {seo.metaTitle}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Meta Description:</span>{' '}
-                  {seo.metaDescription}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Focus Keyword:</span>{' '}
-                  {seo.focusKeyword}
-                </div>
-                {seo.secondaryKeywords.length > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Secondary Keywords:</span>{' '}
-                    {seo.secondaryKeywords.join(', ')}
+            <div className="space-y-4">
+              {/* Blog Content */}
+              {blog && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Content</h4>
+                  <p className="text-sm text-muted-foreground">{blog.excerpt}</p>
+                  <div className="max-h-60 overflow-y-auto rounded-md border p-3 text-sm">
+                    {blog.content.split('\n').map((line, i) => (
+                      <p key={i} className={line ? '' : 'h-4'}>
+                        {line}
+                      </p>
+                    ))}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {task.errorMessage && (
-            <div className="rounded-md bg-destructive/10 p-3">
-              <p className="text-sm text-destructive">{task.errorMessage}</p>
-            </div>
-          )}
-
-          {/* Logs */}
-          {task.logs.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Logs</h4>
-              <div className="max-h-40 overflow-y-auto rounded-md border">
-                {task.logs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex gap-3 border-b px-3 py-2 text-xs last:border-0"
-                  >
-                    <span className="shrink-0 text-muted-foreground">
-                      {new Date(log.createdAt).toLocaleTimeString()}
-                    </span>
-                    <span className="shrink-0 font-mono uppercase text-muted-foreground">
-                      {log.stage}
-                    </span>
-                    <span>{log.message}</span>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span>Author: {blog.author}</span>
+                    <span>{blog.readTimeMinutes} min read</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                </div>
+              )}
 
-          {/* Actions */}
-          {task.status === 'FAILED' && (
-            <Button size="sm" onClick={() => onRetry(task.id)}>
-              <RotateCcw className="h-3 w-3" />
-              Retry
-            </Button>
-          )}
-        </div>
+              {/* SEO Metadata */}
+              {seo && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">SEO Metadata</h4>
+                  <div className="grid gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Meta Title:</span> {seo.metaTitle}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Meta Description:</span>{' '}
+                      {seo.metaDescription}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Focus Keyword:</span>{' '}
+                      {seo.focusKeyword}
+                    </div>
+                    {seo.secondaryKeywords.length > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Secondary Keywords:</span>{' '}
+                        {seo.secondaryKeywords.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {task.errorMessage && (
+                <div className="rounded-md bg-destructive/10 p-3">
+                  <p className="text-sm text-destructive">{task.errorMessage}</p>
+                </div>
+              )}
+
+              {/* Logs */}
+              {logs.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Logs</h4>
+                  <div className="max-h-40 overflow-y-auto rounded-md border">
+                    {logs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex gap-3 border-b px-3 py-2 text-xs last:border-0"
+                      >
+                        <span className="shrink-0 text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleTimeString()}
+                        </span>
+                        <span className="shrink-0 font-mono uppercase text-muted-foreground">
+                          {log.stage}
+                        </span>
+                        <span>{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              {task.status === 'FAILED' && (
+                <Button size="sm" onClick={() => onRetry(task.id)}>
+                  <RotateCcw className="h-3 w-3" />
+                  Retry
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

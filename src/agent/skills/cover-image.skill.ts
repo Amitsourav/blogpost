@@ -82,7 +82,7 @@ export class CoverImageSkill implements ISkill {
   private async generateImage(
     prompt: string,
   ): Promise<{ base64: string; mimeType: string } | null> {
-    const url = `${config.openai.baseUrl}/images/generations`;
+    const url = `${config.openai.baseUrl}/chat/completions`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -92,10 +92,16 @@ export class CoverImageSkill implements ISkill {
       },
       body: JSON.stringify({
         model: config.imageGeneration.model,
-        prompt,
-        n: 1,
-        size: '1024x1024',
-        response_format: 'b64_json',
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        modalities: ['image', 'text'],
+        image_config: {
+          aspect_ratio: '16:9',
+        },
       }),
     });
 
@@ -110,9 +116,16 @@ export class CoverImageSkill implements ISkill {
       throw new Error(data.error.message || 'Unknown OpenRouter API error');
     }
 
-    const b64 = data.data?.[0]?.b64_json;
-    if (b64) {
-      return { mimeType: 'image/png', base64: b64 };
+    // OpenRouter returns images as base64 data URLs in choices[0].message.images
+    const images = data.choices?.[0]?.message?.images;
+    if (images && images.length > 0) {
+      const dataUrl: string = images[0].image_url?.url || images[0].url || '';
+      if (dataUrl.startsWith('data:')) {
+        const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (match) {
+          return { mimeType: match[1], base64: match[2] };
+        }
+      }
     }
 
     return null;
@@ -148,6 +161,15 @@ export class CoverImageSkill implements ISkill {
   private buildImagePrompt(title: string, tags: string[], _industry: string): string {
     const tagList = tags.slice(0, 3).join(', ');
 
-    return `Flat vector blog cover illustration for an education-finance website. Topic: "${title}". Themes: ${tagList}. Style: modern minimal flat vector, soft blue-teal gradient background, abstract geometric shapes, relevant icons (banks=buildings, eligibility=checklists, abroad=globe, rates=graphs). No text, no humans, no faces. Colors: blue, teal, white, yellow accent. Clean edges, web-optimized.`;
+    return `Create a photorealistic blog cover image for an education loan website. Landscape 16:9 ratio.
+
+Title text at the top in large bold white and yellow font: "${title}"
+Subtitle below in smaller white font: "A Complete ${new Date().getFullYear()} Guide"
+
+Scene: wooden desk or table surface with photorealistic 3D objects related to "${title}" and themes: ${tagList}. Include props like graduation cap, books, globe, calculator, coins/currency, airplane (if abroad topic), university building in background.
+
+Background: blurred cityscape or university campus with blue sky.
+
+Style: photorealistic, high quality, professional blog cover. Text must be perfectly spelled and clearly readable. No humans or faces.`;
   }
 }

@@ -16,7 +16,7 @@ export const config = {
   imageGeneration: {
     enabled: process.env.IMAGE_GENERATION_ENABLED !== 'false',
     apiKey: process.env.IMAGE_GENERATION_API_KEY || '',
-    model: process.env.IMAGE_GENERATION_MODEL || 'openai/dall-e-2',
+    model: process.env.IMAGE_GENERATION_MODEL || 'openai/gpt-5-image-mini',
   },
   notion: {
     apiKey: process.env.NOTION_API_KEY || '',
