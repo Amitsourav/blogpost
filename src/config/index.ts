@@ -16,7 +16,7 @@ export const config = {
   imageGeneration: {
     enabled: process.env.IMAGE_GENERATION_ENABLED !== 'false',
     apiKey: process.env.IMAGE_GENERATION_API_KEY || '',
-    model: process.env.IMAGE_GENERATION_MODEL || 'openai/gpt-5-image-mini',
+    model: process.env.IMAGE_GENERATION_MODEL || 'google/gemini-2.5-flash-image',
   },
   notion: {
     apiKey: process.env.NOTION_API_KEY || '',
