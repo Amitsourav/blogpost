@@ -40,6 +40,6 @@ services:
       - key: IMAGE_GENERATION_API_KEY
         sync: false
       - key: IMAGE_GENERATION_MODEL
-        value: google/gemini-2.5-flash-image
+        value: openai/dall-e-2
       - key: LOG_LEVEL
         value: info

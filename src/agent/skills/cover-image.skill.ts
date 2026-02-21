@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import sharp from 'sharp';
 import { ISkill } from '../skill.interface';
 import { AgentContext, PipelineArtifacts, SkillResult } from '../../common/types';
 import { config } from '../../config';
@@ -42,9 +41,8 @@ export class CoverImageSkill implements ISkill {
         return { success: true };
       }
 
-      // Overlay title text on the image
       const rawBuffer = Buffer.from(imageData.base64, 'base64');
-      const finalBuffer = await this.overlayTitle(rawBuffer, blog.title);
+      const finalBuffer = rawBuffer;
 
       // Save image to disk locally
       fs.mkdirSync(IMAGES_DIR, { recursive: true });
@@ -81,83 +79,10 @@ export class CoverImageSkill implements ISkill {
     }
   }
 
-  private async overlayTitle(imageBuffer: Buffer, title: string): Promise<Buffer> {
-    const metadata = await sharp(imageBuffer).metadata();
-    const width = metadata.width || 1280;
-    const height = metadata.height || 720;
-
-    // Calculate font size based on image width and title length
-    const maxCharsPerLine = 35;
-    const fontSize = Math.round(width / 22);
-    const lineHeight = Math.round(fontSize * 1.3);
-    const padding = Math.round(width * 0.06);
-
-    // Word-wrap the title
-    const lines = this.wrapText(title, maxCharsPerLine);
-    const textBlockHeight = lines.length * lineHeight + padding * 2;
-
-    // Position: bottom of image with gradient overlay
-    const gradientTop = height - textBlockHeight - Math.round(padding * 0.5);
-    const textY = height - textBlockHeight + padding * 0.5;
-
-    // Build SVG overlay with semi-transparent dark blue gradient + white text
-    const textLines = lines
-      .map(
-        (line, i) =>
-          `<text x="${padding}" y="${Math.round(textY + i * lineHeight + fontSize)}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="white" filter="url(#shadow)">${this.escapeXml(line)}</text>`,
-      )
-      .join('\n');
-
-    const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(12,40,80,0)" />
-      <stop offset="100%" stop-color="rgba(12,40,80,0.8)" />
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.4)" />
-    </filter>
-  </defs>
-  <rect x="0" y="${gradientTop}" width="${width}" height="${height - gradientTop}" fill="url(#grad)" />
-  ${textLines}
-</svg>`;
-
-    return sharp(imageBuffer)
-      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
-      .png()
-      .toBuffer();
-  }
-
-  private wrapText(text: string, maxChars: number): string[] {
-    const words = text.split(' ');
-    const lines: string[] = [];
-    let currentLine = '';
-
-    for (const word of words) {
-      if (currentLine.length + word.length + 1 <= maxChars) {
-        currentLine += (currentLine ? ' ' : '') + word;
-      } else {
-        if (currentLine) lines.push(currentLine);
-        currentLine = word;
-      }
-    }
-    if (currentLine) lines.push(currentLine);
-    return lines;
-  }
-
-  private escapeXml(text: string): string {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-  }
-
   private async generateImage(
     prompt: string,
   ): Promise<{ base64: string; mimeType: string } | null> {
-    const url = `${config.openai.baseUrl}/chat/completions`;
+    const url = `${config.openai.baseUrl}/images/generations`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -167,16 +92,10 @@ export class CoverImageSkill implements ISkill {
       },
       body: JSON.stringify({
         model: config.imageGeneration.model,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        modalities: ['image', 'text'],
-        image_config: {
-          aspect_ratio: '16:9',
-        },
+        prompt,
+        n: 1,
+        size: '1024x1024',
+        response_format: 'b64_json',
       }),
     });
 
@@ -191,16 +110,9 @@ export class CoverImageSkill implements ISkill {
       throw new Error(data.error.message || 'Unknown OpenRouter API error');
     }
 
-    // OpenRouter returns images as base64 data URLs in choices[0].message.images
-    const images = data.choices?.[0]?.message?.images;
-    if (images && images.length > 0) {
-      const dataUrl: string = images[0].image_url?.url || images[0].url || '';
-      if (dataUrl.startsWith('data:')) {
-        const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-        if (match) {
-          return { mimeType: match[1], base64: match[2] };
-        }
-      }
+    const b64 = data.data?.[0]?.b64_json;
+    if (b64) {
+      return { mimeType: 'image/png', base64: b64 };
     }
 
     return null;
@@ -234,33 +146,8 @@ export class CoverImageSkill implements ISkill {
   }
 
   private buildImagePrompt(title: string, tags: string[], _industry: string): string {
-    return `Create a flat vector illustration for an education loan blog cover for a student-focused fintech brand named Fund My Campus.
+    const tagList = tags.slice(0, 3).join(', ');
 
-Blog topic: "${title}"
-Related themes: ${tags.join(', ')}
-
-Orientation: landscape
-Aspect ratio: 16:9 (wide)
-Target size: 1600×900
-
-Style: modern flat vector illustration, minimal, clean, professional
-
-Scene: education + finance concept using simple objects such as books, graduation cap, laptop, globe, university building, growth arrows, and a subtle rupee symbol. The objects should relate to the blog topic "${title}".
-
-Characters: no real humans, no faces, no facial details (only abstract shapes or faceless silhouettes if required)
-
-Mood: aspirational, trustworthy, calm
-
-Color palette: blue, teal, white with soft gradients
-
-Background: simple gradient or abstract geometric shapes
-
-Composition: wide layout with clear negative space in the bottom third for blog title text overlay, balanced elements
-
-Web optimization: flat shapes, low detail, clean edges, suitable for compression, fast-loading
-
-Avoid: photorealism, detailed textures, human faces, cartoon expressions, clutter, dark colors, any text or words or letters or numbers in the image
-
-Output: web-optimized landscape blog cover`;
+    return `Flat vector blog cover illustration for an education-finance website. Topic: "${title}". Themes: ${tagList}. Style: modern minimal flat vector, soft blue-teal gradient background, abstract geometric shapes, relevant icons (banks=buildings, eligibility=checklists, abroad=globe, rates=graphs). No text, no humans, no faces. Colors: blue, teal, white, yellow accent. Clean edges, web-optimized.`;
   }
 }
