@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { ISkill } from '../skill.interface';
 import { AgentContext, PipelineArtifacts, SkillResult } from '../../common/types';
 import { config } from '../../config';
@@ -133,27 +134,44 @@ export class CoverImageSkill implements ISkill {
 
   private async uploadToPublicHost(imageBuffer: Buffer, filename: string): Promise<string | null> {
     try {
-      // Use tmpfiles.org - free, no API key needed
+      const { cloudName, apiKey, apiSecret } = config.cloudinary;
+      if (!cloudName || !apiKey || !apiSecret) {
+        logger.warn('Cloudinary credentials not configured');
+        return null;
+      }
+
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const folder = 'blog-covers';
+      const publicId = filename.replace(/\.[^.]+$/, '');
+
+      // Generate signature for Cloudinary upload
+      const signatureStr = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+      const signature = crypto.createHash('sha1').update(signatureStr).digest('hex');
+
       const formData = new FormData();
       const blob = new Blob([imageBuffer], { type: 'image/png' });
       formData.append('file', blob, filename);
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('signature', signature);
+      formData.append('folder', folder);
+      formData.append('public_id', publicId);
 
-      const response = await fetch('https://tmpfiles.org/api/v1/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        { method: 'POST', body: formData },
+      );
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const errorBody = await response.text();
+        logger.warn('Cloudinary upload failed', { status: response.status, error: errorBody.substring(0, 200) });
+        return null;
+      }
 
       const data: any = await response.json();
-      const pageUrl = data?.data?.url;
-      if (!pageUrl) return null;
-
-      // Convert page URL to direct download URL with HTTPS
-      // "http://tmpfiles.org/12345/file.png" -> "https://tmpfiles.org/dl/12345/file.png"
-      const directUrl = pageUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-      return directUrl.replace('http://', 'https://');
-    } catch {
+      return data.secure_url || null;
+    } catch (error: any) {
+      logger.warn('Cloudinary upload error', { error: error.message });
       return null;
     }
   }
