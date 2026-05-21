@@ -3,6 +3,7 @@ import { logger } from './config/logger';
 import { createApp } from './server';
 import { prisma } from './config/database';
 import { notionPoller } from './providers/cms/notion/notion.poller';
+import { schedulePoller } from './modules/schedule/schedule.poller';
 
 async function bootstrap() {
   const app = createApp();
@@ -14,6 +15,8 @@ async function bootstrap() {
     notionPoller.start();
   }
 
+  schedulePoller.start();
+
   const server = app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} [${config.nodeEnv}]`);
   });
@@ -21,6 +24,7 @@ async function bootstrap() {
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully`);
     notionPoller.stop();
+    schedulePoller.stop();
     server.close(async () => {
       await prisma.$disconnect();
       logger.info('Server shut down');

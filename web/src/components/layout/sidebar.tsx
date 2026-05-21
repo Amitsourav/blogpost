@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { Sparkles, ListTodo, Settings, Plug } from 'lucide-react';
+import { Sparkles, ListTodo, Settings, Plug, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { to: '/', label: 'Generate', icon: Sparkles },
   { to: '/tasks', label: 'Tasks', icon: ListTodo },
+  { to: '/schedule', label: 'Schedule', icon: Calendar },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/connections', label: 'Connections', icon: Plug },
 ];

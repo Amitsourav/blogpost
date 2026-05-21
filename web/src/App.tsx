@@ -4,6 +4,7 @@ import { SetupGate } from '@/components/setup-gate';
 import { AppLayout } from '@/components/layout/app-layout';
 import GeneratePage from '@/pages/generate';
 import TasksPage from '@/pages/tasks';
+import SchedulePage from '@/pages/schedule';
 import SettingsPage from '@/pages/settings';
 import ConnectionsPage from '@/pages/connections';
 
@@ -19,6 +20,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<GeneratePage />} />
         <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/settings" element={<SettingsPage tenantId={config!.tenantId} onLogout={clear} />} />
         <Route path="/connections" element={<ConnectionsPage tenantId={config!.tenantId} />} />
       </Routes>

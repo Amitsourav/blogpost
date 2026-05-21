@@ -5,6 +5,7 @@ import { errorHandler, requestLogger } from './common/middleware';
 import { tenantRoutes } from './modules/tenant';
 import { contentRoutes } from './modules/content';
 import { webhookRoutes } from './modules/webhook';
+import { scheduleRoutes } from './modules/schedule';
 import { registerSkills } from './agent/register-skills';
 
 export function createApp() {
@@ -26,6 +27,7 @@ export function createApp() {
   app.use('/api/v1/tenants', tenantRoutes);
   app.use('/api/v1/content', contentRoutes);
   app.use('/api/v1/webhooks', webhookRoutes);
+  app.use('/api/v1/schedule', scheduleRoutes);
 
   app.use(errorHandler);
 

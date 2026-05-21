@@ -19,6 +19,8 @@ model Tenant {
   brandProfile   BrandProfile?
   cmsConnections CMSConnection[]
   contentTasks   ContentTask[]
+  scheduleConfig ScheduleConfig?
+  scheduledPosts ScheduledPost[]
 
   @@map("tenants")
 }
@@ -86,8 +88,9 @@ model ContentTask {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  logs   TaskLog[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs          TaskLog[]
+  scheduledPost ScheduledPost?
 
   @@map("content_tasks")
 }
@@ -104,4 +107,46 @@ model TaskLog {
   task ContentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@map("task_logs")
+}
+
+enum ScheduledPostStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model ScheduleConfig {
+  id          String   @id @default(uuid())
+  tenantId    String   @unique
+  isActive    Boolean  @default(false)
+  postsPerDay Int      @default(1)
+  timeOfDay   String   @default("10:00")
+  timezone    String   @default("Asia/Kolkata")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("schedule_configs")
+}
+
+model ScheduledPost {
+  id           String              @id @default(uuid())
+  tenantId     String
+  topic        String
+  keywords     String[]            @default([])
+  position     Int
+  status       ScheduledPostStatus @default(QUEUED)
+  taskId       String?             @unique
+  processedAt  DateTime?
+  errorMessage String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  task   ContentTask? @relation(fields: [taskId], references: [id])
+
+  @@map("scheduled_posts")
 }

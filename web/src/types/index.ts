@@ -112,3 +112,43 @@ export interface TenantConfig {
   apiKey: string;
   tenantId: string;
 }
+
+// Schedule types
+export type ScheduledPostStatus =
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface ScheduleConfig {
+  id?: string;
+  tenantId?: string;
+  isActive: boolean;
+  postsPerDay: number;
+  timeOfDay: string;
+  timezone: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScheduledPost {
+  id: string;
+  tenantId: string;
+  topic: string;
+  keywords: string[];
+  position: number;
+  status: ScheduledPostStatus;
+  taskId: string | null;
+  processedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduledPostListResponse {
+  posts: ScheduledPost[];
+  total: number;
+  page: number;
+  limit: number;
+}

@@ -3,7 +3,7 @@ import { getConfig } from './config';
 // In production, frontend is served by the same server — use relative URL
 const API_BASE = import.meta.env.PROD
   ? '/api/v1'
-  : 'http://localhost:3001/api/v1';
+  : 'http://localhost:3000/api/v1';
 
 class ApiError extends Error {
   statusCode: number;
@@ -62,6 +62,9 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
 };
 
 export { ApiError };
