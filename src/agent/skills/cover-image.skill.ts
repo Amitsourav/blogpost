@@ -5,6 +5,17 @@ import { ISkill } from '../skill.interface';
 import { AgentContext, PipelineArtifacts, SkillResult } from '../../common/types';
 import { config } from '../../config';
 import { logger } from '../../config/logger';
+import { prisma } from '../../config/database';
+
+async function dbLog(taskId: string, level: string, message: string, metadata: Record<string, unknown> = {}) {
+  try {
+    await prisma.taskLog.create({
+      data: { taskId, level, stage: 'cover-image', message, metadata: metadata as any },
+    });
+  } catch {
+    // ignore — logging must never break the pipeline
+  }
+}
 
 const IMAGES_DIR = path.resolve(process.cwd(), 'public', 'images');
 
@@ -21,6 +32,12 @@ export class CoverImageSkill implements ISkill {
   }
 
   async execute(context: AgentContext, artifacts: PipelineArtifacts): Promise<SkillResult> {
+    await dbLog(context.taskId, 'INFO', 'starting', {
+      model: config.imageGeneration.model,
+      enabled: config.imageGeneration.enabled,
+      hasApiKey: !!config.imageGeneration.apiKey,
+      hasCloudinary: !!config.cloudinary.cloudName && !!config.cloudinary.apiKey && !!config.cloudinary.apiSecret,
+    });
     try {
       const blog = artifacts.blogDraft!;
       const prompt = this.buildImagePrompt(
@@ -36,42 +53,48 @@ export class CoverImageSkill implements ISkill {
 
       const imageData = await this.generateImage(prompt);
       if (!imageData) {
+        await dbLog(context.taskId, 'WARN', 'no image data returned from OpenRouter');
         logger.warn('No image data returned, continuing without cover image', {
           taskId: context.taskId,
         });
         return { success: true };
       }
 
+      await dbLog(context.taskId, 'INFO', 'image generated', { mimeType: imageData.mimeType, base64Len: imageData.base64.length });
+
       const rawBuffer = Buffer.from(imageData.base64, 'base64');
       const finalBuffer = rawBuffer;
 
       // Save image to disk locally
-      fs.mkdirSync(IMAGES_DIR, { recursive: true });
+      try {
+        fs.mkdirSync(IMAGES_DIR, { recursive: true });
+        const filename = `cover-${context.taskId}.png`;
+        const filepath = path.join(IMAGES_DIR, filename);
+        fs.writeFileSync(filepath, finalBuffer);
+      } catch (fsErr: any) {
+        await dbLog(context.taskId, 'WARN', 'local file save failed (non-fatal)', { error: fsErr.message });
+      }
+
       const filename = `cover-${context.taskId}.png`;
-      const filepath = path.join(IMAGES_DIR, filename);
-      fs.writeFileSync(filepath, finalBuffer);
 
-      // Upload to tmpfiles.org for a public URL (Notion needs a publicly accessible URL)
-      const publicUrl = await this.uploadToPublicHost(finalBuffer, filename);
+      // Upload to Cloudinary for a public URL (Notion needs a publicly accessible URL)
+      const uploadResult = await this.uploadToPublicHost(finalBuffer, filename, context.taskId);
 
-      if (publicUrl) {
-        artifacts.coverImageUrl = publicUrl;
+      if (uploadResult) {
+        artifacts.coverImageUrl = uploadResult;
+        await dbLog(context.taskId, 'INFO', 'cloudinary upload ok', { url: uploadResult });
         logger.info('Cover image uploaded to public host', {
           taskId: context.taskId,
-          url: publicUrl,
+          url: uploadResult,
         });
       } else {
-        const localUrl = `http://localhost:${config.port}/images/${filename}`;
-        artifacts.coverImageUrl = localUrl;
-        logger.warn('Public upload failed, using local URL (Notion cover will not work)', {
-          taskId: context.taskId,
-          url: localUrl,
-        });
+        await dbLog(context.taskId, 'WARN', 'cloudinary upload returned null (see prior log)');
+        logger.warn('Public upload failed, skipping cover image', { taskId: context.taskId });
       }
 
       return { success: true };
     } catch (error: any) {
-      // Image generation failure should not block the pipeline
+      await dbLog(context.taskId, 'ERROR', 'cover skill threw', { error: error.message, stack: error.stack?.split('\n').slice(0, 5).join(' | ') });
       logger.warn('Cover image generation failed, continuing without image', {
         taskId: context.taskId,
         error: error.message,
@@ -108,7 +131,7 @@ export class CoverImageSkill implements ISkill {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`OpenRouter image API error ${response.status}: ${errorBody.substring(0, 300)}`);
+      throw new Error(`OpenRouter image API error ${response.status} ${response.statusText}: ${errorBody.substring(0, 400)}`);
     }
 
     const data: any = await response.json();
@@ -132,10 +155,11 @@ export class CoverImageSkill implements ISkill {
     return null;
   }
 
-  private async uploadToPublicHost(imageBuffer: Buffer, filename: string): Promise<string | null> {
+  private async uploadToPublicHost(imageBuffer: Buffer, filename: string, taskId?: string): Promise<string | null> {
     try {
       const { cloudName, apiKey, apiSecret } = config.cloudinary;
       if (!cloudName || !apiKey || !apiSecret) {
+        if (taskId) await dbLog(taskId, 'WARN', 'cloudinary creds missing', { hasCloudName: !!cloudName, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret });
         logger.warn('Cloudinary credentials not configured');
         return null;
       }
@@ -164,6 +188,7 @@ export class CoverImageSkill implements ISkill {
 
       if (!response.ok) {
         const errorBody = await response.text();
+        if (taskId) await dbLog(taskId, 'ERROR', 'cloudinary upload HTTP error', { status: response.status, body: errorBody.substring(0, 300) });
         logger.warn('Cloudinary upload failed', { status: response.status, error: errorBody.substring(0, 200) });
         return null;
       }
@@ -171,6 +196,7 @@ export class CoverImageSkill implements ISkill {
       const data: any = await response.json();
       return data.secure_url || null;
     } catch (error: any) {
+      if (taskId) await dbLog(taskId, 'ERROR', 'cloudinary upload threw', { error: error.message });
       logger.warn('Cloudinary upload error', { error: error.message });
       return null;
     }
