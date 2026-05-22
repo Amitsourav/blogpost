@@ -51,16 +51,27 @@ export class CoverImageSkill implements ISkill {
         model: config.imageGeneration.model,
       });
 
-      const imageData = await this.generateImage(prompt);
+      // Gemini occasionally returns only text instead of an image. Retry up to 3 times.
+      let imageData: { base64: string; mimeType: string } | null = null;
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        imageData = await this.generateImage(prompt);
+        if (imageData) {
+          await dbLog(context.taskId, 'INFO', 'image generated', { attempt, mimeType: imageData.mimeType, base64Len: imageData.base64.length });
+          break;
+        }
+        await dbLog(context.taskId, 'WARN', 'no image in response, will retry', { attempt, remaining: MAX_ATTEMPTS - attempt });
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
       if (!imageData) {
-        await dbLog(context.taskId, 'WARN', 'no image data returned from OpenRouter');
-        logger.warn('No image data returned, continuing without cover image', {
+        await dbLog(context.taskId, 'WARN', 'all retries exhausted, no cover image');
+        logger.warn('No image data returned after retries, continuing without cover', {
           taskId: context.taskId,
         });
         return { success: true };
       }
-
-      await dbLog(context.taskId, 'INFO', 'image generated', { mimeType: imageData.mimeType, base64Len: imageData.base64.length });
 
       const rawBuffer = Buffer.from(imageData.base64, 'base64');
       const finalBuffer = rawBuffer;
