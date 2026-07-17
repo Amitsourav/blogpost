@@ -8,6 +8,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useTenant } from '@/hooks/use-tenant';
 import { useCreateCmsConnection } from '@/hooks/use-cms-connection';
 import { maskToken } from '@/lib/utils';
@@ -16,28 +23,44 @@ interface ConnectionsPageProps {
   tenantId: string;
 }
 
+type Provider = 'notion' | 'shopify';
+
+const EMPTY_FORM = {
+  accessToken: '',
+  contentDatabaseId: '',
+  triggerDatabaseId: '',
+  storeDomain: '',
+};
+
 export default function ConnectionsPage({ tenantId }: ConnectionsPageProps) {
   const { data: tenant, isLoading } = useTenant(tenantId);
   const createConnection = useCreateCmsConnection(tenantId);
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    accessToken: '',
-    contentDatabaseId: '',
-    triggerDatabaseId: '',
-  });
+  const [provider, setProvider] = useState<Provider>('notion');
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  const isShopify = provider === 'shopify';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     try {
       await createConnection.mutateAsync({
+        provider,
         accessToken: form.accessToken,
-        contentDatabaseId: form.contentDatabaseId,
-        triggerDatabaseId: form.triggerDatabaseId || undefined,
+        // For Shopify this field carries the blog reference (a handle like "news").
+        // Blank tells the adapter to fall back to the store's first blog.
+        contentDatabaseId: isShopify
+          ? form.contentDatabaseId || 'news'
+          : form.contentDatabaseId,
+        triggerDatabaseId: isShopify ? undefined : form.triggerDatabaseId || undefined,
+        config: isShopify
+          ? { storeDomain: form.storeDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '') }
+          : undefined,
       });
       toast.success('Connection added');
-      setForm({ accessToken: '', contentDatabaseId: '', triggerDatabaseId: '' });
+      setForm(EMPTY_FORM);
       setShowForm(false);
     } catch {
       toast.error('Failed to add connection');
@@ -61,7 +84,7 @@ export default function ConnectionsPage({ tenantId }: ConnectionsPageProps) {
         <div>
           <h1 className="text-2xl font-semibold">Connections</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your Notion CMS connections.
+            Manage where your blog posts get published.
           </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} variant="outline">
@@ -96,8 +119,19 @@ export default function ConnectionsPage({ tenantId }: ConnectionsPageProps) {
                   </div>
                   <div className="text-xs text-muted-foreground space-y-0.5">
                     <p>Token: {maskToken(conn.accessToken)}</p>
-                    <p>Content DB: {conn.contentDatabaseId}</p>
-                    {conn.triggerDatabaseId && <p>Trigger DB: {conn.triggerDatabaseId}</p>}
+                    {conn.provider === 'shopify' ? (
+                      <>
+                        <p>Store: {String(conn.config?.storeDomain ?? '—')}</p>
+                        <p>Blog: {conn.contentDatabaseId || 'first blog'}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>Content DB: {conn.contentDatabaseId}</p>
+                        {conn.triggerDatabaseId && (
+                          <p>Trigger DB: {conn.triggerDatabaseId}</p>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -107,7 +141,7 @@ export default function ConnectionsPage({ tenantId }: ConnectionsPageProps) {
       ) : (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No connections yet. Add a Notion connection to publish blog posts.
+            No connections yet. Add a Notion or Shopify connection to publish blog posts.
           </CardContent>
         </Card>
       )}
@@ -116,48 +150,95 @@ export default function ConnectionsPage({ tenantId }: ConnectionsPageProps) {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">New Notion Connection</CardTitle>
+            <CardTitle className="text-lg">New Connection</CardTitle>
             <CardDescription>
-              Enter your Notion integration credentials.
+              {isShopify
+                ? 'Enter your Shopify custom app credentials.'
+                : 'Enter your Notion integration credentials.'}
             </CardDescription>
           </CardHeader>
           <Separator />
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
+                <Label htmlFor="provider">Provider</Label>
+                <Select
+                  value={provider}
+                  onValueChange={(v) => {
+                    setProvider(v as Provider);
+                    setForm(EMPTY_FORM);
+                  }}
+                >
+                  <SelectTrigger id="provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="notion">Notion</SelectItem>
+                    <SelectItem value="shopify">Shopify</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {isShopify && (
+                <div className="space-y-2">
+                  <Label htmlFor="storeDomain">Store Domain</Label>
+                  <Input
+                    id="storeDomain"
+                    placeholder="your-store.myshopify.com"
+                    value={form.storeDomain}
+                    onChange={(e) => setForm({ ...form, storeDomain: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
                 <Label htmlFor="accessToken">Access Token</Label>
                 <Input
                   id="accessToken"
                   type="password"
-                  placeholder="ntn_..."
+                  placeholder={isShopify ? 'shpat_...' : 'ntn_...'}
                   value={form.accessToken}
                   onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
                   required
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="contentDatabaseId">Content Database ID</Label>
+                <Label htmlFor="contentDatabaseId">
+                  {isShopify ? 'Blog Handle' : 'Content Database ID'}
+                </Label>
                 <Input
                   id="contentDatabaseId"
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  placeholder={isShopify ? 'news' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}
                   value={form.contentDatabaseId}
                   onChange={(e) =>
                     setForm({ ...form, contentDatabaseId: e.target.value })
                   }
-                  required
+                  required={!isShopify}
                 />
+                {isShopify && (
+                  <p className="text-xs text-muted-foreground">
+                    The blog to publish into, from your Shopify URL
+                    (/blogs/<span className="font-medium">news</span>). Leave blank to use
+                    the store's first blog.
+                  </p>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="triggerDatabaseId">Trigger Database ID (optional)</Label>
-                <Input
-                  id="triggerDatabaseId"
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  value={form.triggerDatabaseId}
-                  onChange={(e) =>
-                    setForm({ ...form, triggerDatabaseId: e.target.value })
-                  }
-                />
-              </div>
+
+              {!isShopify && (
+                <div className="space-y-2">
+                  <Label htmlFor="triggerDatabaseId">Trigger Database ID (optional)</Label>
+                  <Input
+                    id="triggerDatabaseId"
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    value={form.triggerDatabaseId}
+                    onChange={(e) =>
+                      setForm({ ...form, triggerDatabaseId: e.target.value })
+                    }
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button type="submit" disabled={createConnection.isPending}>
                   {createConnection.isPending ? (
