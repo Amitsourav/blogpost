@@ -3,7 +3,8 @@ import { ISkill } from '../skill.interface';
 import { AgentContext, PipelineArtifacts, SkillResult } from '../../common/types';
 import { getAIProvider } from '../../providers/ai';
 import { calculateReadTime } from '../../common/utils/read-time';
-import { postProcessContent } from '../../common/utils/post-process';
+import { postProcessContent, findYears } from '../../common/utils/post-process';
+import { BlogLengthSpec, getBlogLengthSpec } from '../../common/utils/blog-length';
 import { logger } from '../../config/logger';
 
 const seoSchema = z.object({
@@ -17,7 +18,43 @@ const seoSchema = z.object({
   tags: z.array(z.string()),
 });
 
-function buildDefaultPrompt(brandProfile: AgentContext['brandProfile']): string {
+const topicScopeSchema = z.object({
+  tier: z.enum(['short', 'medium', 'long']),
+  reason: z.string(),
+});
+
+const CONTENT_RESTRICTIONS = `CONTENT RESTRICTIONS (mandatory)
+- Do NOT mention any calendar year (e.g. 2024, 2025, 2026) anywhere — not in headings, examples, tables or FAQs. Use timeless phrasing like "currently" or "at the time of applying" instead.
+- Do NOT include student stories, personal anecdotes or case studies about named individuals. Explain with general scenarios instead.`;
+
+/**
+ * Decides how long the post should be based on how broad the topic is,
+ * so narrow questions get short posts and broad guides get long ones.
+ */
+async function sizeTopic(topic: string, keywords: string[]): Promise<BlogLengthSpec> {
+  const ai = getAIProvider();
+  const result = await ai.generateStructured(
+    'You are a content strategist who decides how long a blog post should be.',
+    `Classify how much depth this blog topic needs.
+
+Topic: "${topic}"
+${keywords.length > 0 ? `Keywords: ${keywords.join(', ')}` : ''}
+
+- short: a narrow, single question or simple definition (600-900 words)
+- medium: an explainer or comparison of a few options (1,000-1,500 words)
+- long: a broad, complete guide covering many sub-topics (1,800-2,500 words)
+
+Return JSON with "tier" (short | medium | long) and a one-line "reason".`,
+    topicScopeSchema,
+    'topic_scope',
+  );
+  return getBlogLengthSpec(result.tier);
+}
+
+function buildDefaultPrompt(
+  brandProfile: AgentContext['brandProfile'],
+  length: BlogLengthSpec,
+): string {
   const rules = Array.isArray(brandProfile.contentRules) && brandProfile.contentRules.length > 0
     ? `\nContent rules:\n${(brandProfile.contentRules as string[]).map((r) => `- ${r}`).join('\n')}`
     : '';
@@ -28,7 +65,7 @@ Brand tone: ${brandProfile.brandTone}
 Target audience: ${brandProfile.targetAudience}
 ${brandProfile.writingGuidelines ? `Writing guidelines: ${brandProfile.writingGuidelines}` : ''}${rules}
 
-Write in markdown format. Target 1,200-1,600 words. Use a conversational, direct tone — write like a knowledgeable friend explaining things, not a textbook.
+Write in markdown format. Target ${length.minWords.toLocaleString('en-US')}-${length.maxWords.toLocaleString('en-US')} words. Use a conversational, direct tone — write like a knowledgeable friend explaining things, not a textbook.
 
 BLOG STRUCTURE (follow this order exactly)
 
@@ -53,26 +90,20 @@ BLOG STRUCTURE (follow this order exactly)
 3) STEP-BY-STEP PROCESS (## heading, then ### for each step)
    - Format: ### Step 1: Action Title
    - Write 2-3 sentences per step with specific actionable advice
-   - Include 5-7 steps
-
+   - Include ${length.steps} steps
+${length.includePeopleAlsoAsk ? `
 4) PEOPLE ALSO ASK (## People Also Ask)
    - Pick 2-3 related questions your audience would search for
    - Answer each in 2-3 sentences under ### subheadings
-
-5) CASE EXAMPLE (## Real-Life Example or similar heading)
-   - Use a realistic Indian name (e.g., Ananya, Rohan, Priya)
-   - Include specific ₹ amounts, loan details, bank names
-   - Show the decision-making process and outcome
-   - 150-200 words
-
-6) COMMON MISTAKES (## section)
+` : ''}
+5) COMMON MISTAKES (## section)
    - 4-5 mistakes as bullet points with brief explanation of each
 
-7) FAQs (## Frequently Asked Questions)
-   - 4-6 questions formatted as: ### 1) Question text here?
+6) FAQs (## Frequently Asked Questions)
+   - ${length.faqs} questions formatted as: ### 1) Question text here?
    - Each answer: 2-3 crisp sentences
 
-8) CLOSING PARAGRAPH (no heading — just a natural final paragraph)
+7) CLOSING PARAGRAPH (no heading — just a natural final paragraph)
    - Weave in a mention of ${brandProfile.companyName} as helpful advice, not a sales pitch
    - Example: "If you're looking to compare options, platforms like ${brandProfile.companyName} can help you find the best fit."
    - Do NOT add a heading like "## ${brandProfile.companyName} Mention" or "## Conclusion"
@@ -86,10 +117,13 @@ SEO GUIDELINES
 WRITING STYLE
 - Short paragraphs (1-3 lines). Break up long paragraphs.
 - Conversational and direct. Use "you" and "your" frequently.
-- Use specific numbers, ₹ amounts, percentages — never be vague.
+- Only state figures (rates, fees, ₹ amounts, limits) you are confident are widely established. Give typical ranges rather than exact numbers, and add "check with the lender for current rates" where figures change often.
+- Do NOT invent specific bank names, schemes or statistics. Refer to lender types (public sector banks, NBFCs) unless a fact is well known.
 - Bold only for short labels like "Typical advantages:" or "Key point:" — never bold entire sentences.
 - Use "-" for bullet lists, not "*"
-- No emojis. No "As an AI" disclaimers. Just write the blog.`;
+- No emojis. No "As an AI" disclaimers. Just write the blog.
+
+${CONTENT_RESTRICTIONS}`;
 }
 
 export class BlogGenerationSkill implements ISkill {
@@ -105,28 +139,55 @@ export class BlogGenerationSkill implements ISkill {
       const ai = getAIProvider();
       const { brandProfile, topic, keywords } = context;
 
+      // ---- STEP 0: Size the post to the topic's scope ----
+      const length = await sizeTopic(topic, keywords).catch((err) => {
+        logger.warn('Topic sizing failed, defaulting to medium', {
+          taskId: context.taskId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return getBlogLengthSpec('medium');
+      });
+      logger.info('Blog length chosen', {
+        taskId: context.taskId,
+        tier: length.tier,
+        minWords: length.minWords,
+        maxWords: length.maxWords,
+      });
+
       // Use tenant's custom prompt if set, otherwise build from brand profile fields
       const customPrompt = (brandProfile as any).customPrompt as string | undefined;
       const systemPrompt = customPrompt && customPrompt.trim().length > 0
-        ? customPrompt.replace(/\{TOPIC\}/gi, topic)
-        : buildDefaultPrompt(brandProfile);
+        ? `${customPrompt.replace(/\{TOPIC\}/gi, topic)}\n\n${CONTENT_RESTRICTIONS}`
+        : buildDefaultPrompt(brandProfile, length);
+
+      const sections = [
+        'intro',
+        'main content',
+        'step-by-step process',
+        ...(length.includePeopleAlsoAsk ? ['People Also Ask'] : []),
+        'common mistakes',
+        'FAQs',
+        'closing paragraph',
+      ].join(', ');
 
       // ---- STEP 1: Generate the full blog content as plain text ----
-      const contentPrompt = `Write a detailed, comprehensive blog post about: "${topic}"
+      const contentPrompt = `Write a blog post about: "${topic}"
 ${keywords.length > 0 ? `\nTarget keywords to naturally incorporate: ${keywords.join(', ')}` : ''}
 
-MANDATORY LENGTH: Write AT LEAST 1,200 words. Target 1,400-1,600 words.
-- Each H2 section must have 150-250 words of real content with specific details, data, and examples.
+MANDATORY LENGTH: This topic needs a ${length.tier} post. Write ${length.minWords.toLocaleString('en-US')}-${length.maxWords.toLocaleString('en-US')} words — no padding beyond what the topic needs.
+- Each H2 section should have ${length.sectionWords} words of real content with specific details and examples.
 - The intro must be 120-170 words across 2-3 short paragraphs.
-- Write every section in full detail. Do NOT summarize or be brief. Expand each point thoroughly.
-- Include ALL sections from your instructions: intro, main content, step-by-step process, People Also Ask, case example, common mistakes, FAQs, closing paragraph.
+- Include ALL sections from your instructions: ${sections}.
+- Do NOT include a case study, real-life example or story about a named person or student.
+- Do NOT mention any calendar year (e.g. 2024, 2025). Use timeless phrasing instead.
+- Do NOT invent statistics, exact rates or bank-specific figures. Use ranges and general lender types; an editor verifies every figure.
 - Do NOT include a "Sources Checked" section. Do NOT include a heading like "## FundMyCampus Mention" or "## Brand Mention". End with a natural closing paragraph.
 - Output the blog in markdown format only. No JSON, no wrapping.
 
 FORMATTING RULES (critical — follow exactly):
 - Do NOT include a Table of Contents
 - For tables, use proper markdown table syntax: | Header | Header | then |---|---| then data rows
-- Bold is ONLY for standalone labels on their own line (not inside a bullet), like:\n  **Typical advantages:**\n  **Key takeaway:**\n- NEVER start a bullet point with bold text. NEVER use this pattern: "- **Label:** text". Instead write it as a plain sentence.\n  BAD: "- **Processing fees:** Factor in any upfront costs"\n  GOOD: "- Processing fees can significantly add to your total cost"\n  BAD: "- **Ignoring total costs:** Focus not just on..."\n  GOOD: "- Many students ignore total loan costs and focus only on interest rates"
+- Bold is ONLY for standalone labels on their own line (not inside a bullet), like:\n  **Typical advantages:**\n  **Key takeaway:**\n- NEVER start a bullet point with bold text. NEVER use this pattern: "- **Label:** text". Instead write it as a plain sentence.\n  BAD: "- **Processing fees:** Factor in any upfront costs"\n  GOOD: "- Processing fees can significantly add to your total cost"\n  BAD: "- **Ignoring total costs:** Focus not just on..."\n  GOOD: "- Many borrowers ignore total loan costs and focus only on interest rates"
 - Do NOT use brackets or placeholders like [Internal link: ...] or [CTA placeholder]. Write natural text instead.
 - Do NOT use asterisk for footnotes like 6.75%*. Write: 6.75% (subject to T&C)
 - Use "-" for bullet lists, never "*"
@@ -144,6 +205,14 @@ FORMATTING RULES (critical — follow exactly):
         taskId: context.taskId,
         wordCount,
       });
+
+      const years = findYears(blogContent);
+      if (years.length > 0) {
+        logger.warn('Blog content mentions calendar years', {
+          taskId: context.taskId,
+          years,
+        });
+      }
 
       // ---- STEP 2: Extract SEO metadata from the content ----
       const seoPrompt = `Based on the following blog post, extract SEO metadata.

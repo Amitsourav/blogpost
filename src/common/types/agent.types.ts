@@ -1,5 +1,6 @@
 import { BrandProfile, CMSConnection } from '@prisma/client';
 import { BlogOutput, SEOMetadata } from './content.types';
+import type { ReviewIssue } from '../../agent/content-review';
 
 export interface AgentContext {
   taskId: string;
@@ -16,6 +17,7 @@ export interface PipelineArtifacts {
   coverImageUrl?: string;
   publishedCmsId?: string;
   publishedUrl?: string;
+  reviewIssues?: ReviewIssue[];
 }
 
 export interface SkillResult {

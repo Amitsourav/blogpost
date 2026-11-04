@@ -137,6 +137,15 @@ function removeUnwantedSections(content: string): string {
   return result.trim();
 }
 
+/**
+ * Returns the distinct calendar years (1900-2099) mentioned in the content.
+ * Blogs should stay timeless, so any hit is flagged for review.
+ */
+export function findYears(content: string): string[] {
+  const matches = content.match(/\b(19|20)\d{2}\b/g) ?? [];
+  return [...new Set(matches)];
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')

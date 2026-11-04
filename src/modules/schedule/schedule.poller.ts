@@ -2,6 +2,7 @@ import { logger } from '../../config/logger';
 import { ScheduleRepository } from './schedule.repository';
 import { ScheduleService } from './schedule.service';
 import { ContentRepository } from '../content/content.repository';
+import { calculateRandomSlotTimes } from './slot-times';
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -56,8 +57,14 @@ export class SchedulePoller {
     // Parse timeOfDay (HH:mm)
     const [startHour, startMinute] = config.timeOfDay.split(':').map(Number);
 
-    // Calculate slot times for today
-    const slots = this.calculateSlotTimes(startHour, startMinute, config.postsPerDay);
+    // Random slot times for today between the start time and 18:00,
+    // fixed per tenant per day so every poll sees the same slots
+    const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+    const slots = calculateRandomSlotTimes(
+      startHour * 60 + startMinute,
+      config.postsPerDay,
+      `${config.tenantId}:${dateKey}`,
+    );
 
     // How many slots have elapsed?
     const currentHour = now.getHours();
@@ -92,29 +99,6 @@ export class SchedulePoller {
     if (executed) {
       logger.info('Schedule: post triggered', { tenantId: config.tenantId });
     }
-  }
-
-  /**
-   * Calculate slot times in minutes from midnight.
-   * E.g., postsPerDay=3, startHour=9, startMinute=0 → [540, 840, 1140] (09:00, 14:00, 19:00)
-   */
-  private calculateSlotTimes(startHour: number, startMinute: number, postsPerDay: number): number[] {
-    const startMinutes = startHour * 60 + startMinute;
-
-    if (postsPerDay === 1) {
-      return [startMinutes];
-    }
-
-    // Spread posts evenly from startTime to end of day (23:59)
-    const endMinutes = 23 * 60 + 59;
-    const availableWindow = endMinutes - startMinutes;
-    const interval = Math.floor(availableWindow / postsPerDay);
-
-    const slots: number[] = [];
-    for (let i = 0; i < postsPerDay; i++) {
-      slots.push(startMinutes + i * interval);
-    }
-    return slots;
   }
 
   /**
