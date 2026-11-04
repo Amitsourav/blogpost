@@ -8,7 +8,7 @@ export class ScheduleController {
   getConfig = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const config = await this.service.getConfig(req.tenant!.id);
-      res.json(config || { isActive: false, postsPerDay: 1, timeOfDay: '10:00', timezone: 'Asia/Kolkata' });
+      res.json(config || { isActive: false, postsPerDay: 3, timeOfDay: '10:00', timezone: 'Asia/Kolkata' });
     } catch (err) {
       next(err);
     }

@@ -23,6 +23,7 @@ export interface ContentOutput {
   coverImageUrl?: string;
   publishedUrl?: string;
   publishedCmsId?: string;
+  reviewIssues?: { type: string; excerpt: string; note: string }[];
 }
 
 export interface GenerateContentInput {

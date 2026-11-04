@@ -6,7 +6,7 @@ import { skillRegistry } from './skill-registry';
 import { PipelineArtifacts, ContentOutput } from '../common/types';
 import { ContentTaskStatus, Prisma } from '@prisma/client';
 
-const DEFAULT_PIPELINE = ['blog-generation', 'seo-metadata', 'cover-image', 'cms-publish'];
+const DEFAULT_PIPELINE = ['blog-generation', 'duplicate-check', 'fact-check', 'seo-metadata', 'cover-image', 'cms-publish'];
 const RETRY_BASE_DELAY_MS = 2000;
 
 export class Orchestrator {
@@ -63,6 +63,7 @@ export class Orchestrator {
         coverImageUrl: artifacts.coverImageUrl,
         publishedUrl: artifacts.publishedUrl,
         publishedCmsId: artifacts.publishedCmsId,
+        reviewIssues: artifacts.reviewIssues,
       };
 
       const finalStatus = artifacts.publishedCmsId

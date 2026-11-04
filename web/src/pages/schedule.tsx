@@ -81,7 +81,7 @@ function ScheduleSettings() {
 
   const [form, setForm] = useState({
     isActive: false,
-    postsPerDay: 1,
+    postsPerDay: 3,
     timeOfDay: '10:00',
     timezone: 'Asia/Kolkata',
   });
@@ -156,7 +156,7 @@ function ScheduleSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="timeOfDay">Start time</Label>
+              <Label htmlFor="timeOfDay">Earliest time (posts go out at random times until 6 PM)</Label>
               <Input
                 id="timeOfDay"
                 type="time"
